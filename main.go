@@ -1,13 +1,15 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"flag"
-	"go.uber.org/zap"
 	"io"
 	"log"
 	"net"
 	"os"
+
+	"go.uber.org/zap"
 	"tailscale.com/tsnet"
 )
 
@@ -15,15 +17,8 @@ var (
 	tsHostname = flag.String("ts-hostname", "", "hostname to use for tailscale (or set env: TS_HOSTNAME)")
 	listenPort = flag.String("listen-port", "", "port to listen on (or set env: LISTEN_PORT)")
 	targetAddr = flag.String("target-addr", "", "address:port of a tailscale node to send traffic to (or set env: TARGET_ADDR)")
-	tsAuthKey  = getEnv("TS_AUTH_KEY", "")
+	tsAuthKey  = cmp.Or(os.Getenv("TS_AUTH_KEY"), "")
 )
-
-func getEnv(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return fallback
-}
 
 func fwd(logger *zap.SugaredLogger, lstConn net.Conn, ts *tsnet.Server, target string) {
 	defer lstConn.Close()
