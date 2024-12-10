@@ -15,6 +15,11 @@ connect to over Railway's Private Network.
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/YIGsfy?referralCode=EPXG5z)
 
+> ⚠️ **Warning**: Do not expose this service on Railway publicly! This service
+> is intended to be used via Railway's Private Network only.
+>
+> ![Networking settings warning](https://res.cloudinary.com/railway/image/upload/v1733851092/cs-2024-12-11-01.12_f1z1xy.png)
+
 ## Configuration
 
 | Environment Variable | CLI Argument   | Description                                                 |
