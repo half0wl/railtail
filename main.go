@@ -13,8 +13,8 @@ import (
 
 var (
 	tsHostname = flag.String("ts-hostname", "", "hostname to use for tailscale (or set env: TS_HOSTNAME)")
-	listenAddr = flag.String("listen-addr", "", "address:port to listen on (or set env: LISTEN_ADDR)")
-	targetAddr = flag.String("target-addr", "", "address:port of a tailscale peer to send traffic to (or set env: TARGET_ADDR)")
+	listenPort = flag.String("listen-port", "", "port to listen on (or set env: LISTEN_PORT)")
+	targetAddr = flag.String("target-addr", "", "address:port of a tailscale node to send traffic to (or set env: TARGET_ADDR)")
 	tsAuthKey  = getEnv("TS_AUTH_KEY", "")
 )
 
@@ -76,11 +76,11 @@ func main() {
 		logger.Fatal("ts-hostname is required (set TS_HOSTNAME in env or use -ts-hostname)")
 	}
 
-	if *listenAddr == "" {
-		*listenAddr = os.Getenv("LISTEN_ADDR")
+	if *listenPort == "" {
+		*listenPort = os.Getenv("LISTEN_PORT")
 	}
-	if *listenAddr == "" {
-		logger.Fatal("listen-addr is required (set LISTEN_ADDR in env or use -listen-addr)")
+	if *listenPort == "" {
+		logger.Fatal("listen-port is required (set LISTEN_PORT in env or use -listen-port)")
 	}
 
 	if *targetAddr == "" {
@@ -102,8 +102,9 @@ func main() {
 	}
 	defer ts.Close()
 
-	logger.Infof("🚀 Starting railtail (ts-hostname=%s, listen=%s, target=%s)", *tsHostname, *listenAddr, *targetAddr)
-	listener, err := net.Listen("tcp", *listenAddr)
+	listenAddr := "[::]:" + *listenPort
+	logger.Infof("🚀 Starting railtail (ts-hostname=%s, listen-addr=%s, target-addr=%s)", *tsHostname, listenAddr, *targetAddr)
+	listener, err := net.Listen("tcp", listenAddr)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {

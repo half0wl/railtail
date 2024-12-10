@@ -21,7 +21,7 @@ connect to over Railway's Private Network.
 | -------------------- | -------------- | ----------------------------------------------------------- |
 | `TS_AUTH_KEY`        | N/A            | Required. Tailscale auth key. Must be set in environment.   |
 | `TS_HOSTNAME`        | `-ts-hostname` | Required. Hostname to use for Tailscale.                    |
-| `LISTEN_ADDR`        | `-listen-addr` | Required. Local address to listen on.                       |
+| `LISTEN_PORT`        | `-listen-port` | Required. Port to listen on.                                |
 | `TARGET_ADDR`        | `-target-addr` | Required. Address of the Tailscale node to send traffic to. |
 
 _CLI arguments will take precedence over environment variables._
@@ -53,5 +53,5 @@ _CLI arguments will take precedence over environment variables._
 3. Use your new railtail service's Private Domain to connect to your RDS instance:
 
    ```sh
-   DATABASE_URL="postgresql://u:p@${{railtail.RAILWAY_PRIVATE_DOMAIN}}:5432/dbname"
+   DATABASE_URL="postgresql://u:p@${{railtail.RAILWAY_PRIVATE_DOMAIN}}:${{railtail.LISTEN_PORT}}/dbname"
    ```
