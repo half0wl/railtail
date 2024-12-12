@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/half0wl/railtail/internal/config"
@@ -30,7 +31,7 @@ func main() {
 		UserLogf: func(format string, v ...any) {
 			logger.Stdout.Info(fmt.Sprintf(format, v...))
 		},
-		Dir: "./data/railtail",
+		Dir: filepath.Join(cfg.TSStateDirPath, "railtail"),
 	}
 	if err := ts.Start(); err != nil {
 		logger.StderrWithSource.Error("failed to start tailscale network server", logger.ErrAttr(err))
@@ -45,6 +46,7 @@ func main() {
 		slog.String("ts-hostname", cfg.TSHostname),
 		slog.String("listen-addr", listenAddr),
 		slog.String("target-addr", cfg.TargetAddr),
+		slog.String("ts-state-dir", filepath.Join(cfg.TSStateDirPath, "railtail")),
 	)
 
 	listener, err := net.Listen("tcp", listenAddr)
