@@ -4,6 +4,8 @@ railtail is a HTTP/TCP proxy for Railway workloads connecting to Tailscale
 nodes. It listens on a local address and forwards traffic it receives on
 the local address to a target Tailscale node address.
 
+📣 This is a workaround until there are [full VMs available in Railway](https://help.railway.com/feedback/full-unix-v-ms-44eef294). Please upvote the thread if you want this feature!
+
 ## Usage
 
 1. [Install and setup Tailscale](https://tailscale.com/kb/1017/install) on the
@@ -49,7 +51,7 @@ local SOCKS5/HTTP proxy, which is not always ergonomical especially if
 you're connecting to databases or other services with minimal support
 for SOCKS5 (e.g. db connections from an application).
 
-This is designed to be run as a separate service in Railway that you
+railtail is designed to be run as a separate service in Railway that you
 connect to over Railway's Private Network.
 
 > ⚠️ **Warning**: Do not expose this service on Railway publicly!
