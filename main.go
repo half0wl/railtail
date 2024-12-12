@@ -3,10 +3,14 @@ package main
 import (
 	"cmp"
 	"context"
+	"crypto/tls"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net"
+	"net/http"
+	"net/url"
 	"os"
 
 	"go.uber.org/zap"
@@ -20,10 +24,10 @@ var (
 	tsAuthKey  = cmp.Or(os.Getenv("TS_AUTH_KEY"), "")
 )
 
-func fwd(logger *zap.SugaredLogger, lstConn net.Conn, ts *tsnet.Server, target string) {
+func handleTcpConn(logger *zap.SugaredLogger, lstConn net.Conn, ts *tsnet.Server, target string) {
 	defer lstConn.Close()
 
-	logger.Infof("fwd: %s -> %s -> %s", lstConn.LocalAddr(), lstConn.RemoteAddr(), target)
+	logger.Infof("[tcp] fwd: %s -> %s -> %s", lstConn.LocalAddr(), lstConn.RemoteAddr(), target)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -47,6 +51,44 @@ func fwd(logger *zap.SugaredLogger, lstConn net.Conn, ts *tsnet.Server, target s
 	}()
 	<-lstChan
 	<-tsChan
+}
+
+func handleHttpConn(logger *zap.SugaredLogger, outboundClient *http.Client, targetAddr string, w http.ResponseWriter, r *http.Request) {
+	targetUri := fmt.Sprintf("%s%s", targetAddr, r.URL.Path)
+
+	logger.Infof("[http] %s %s", r.Method, targetUri)
+
+	outReq, err := http.NewRequest(r.Method, targetUri, r.Body)
+	if err != nil {
+		logger.Errorf("error creating request: %v", err)
+		http.Error(w, "error creating request", http.StatusInternalServerError)
+		return
+	}
+
+	// Copy headers: in -> out
+	for name, values := range r.Header {
+		for _, value := range values {
+			outReq.Header.Add(name, value)
+		}
+	}
+
+	resp, err := outboundClient.Do(outReq)
+	if err != nil {
+		logger.Errorf("error sending request: %v", err)
+		http.Error(w, "error sending request", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Copy headers: out (resp) -> in
+	for name, values := range resp.Header {
+		for _, value := range values {
+			w.Header().Add(name, value)
+		}
+	}
+
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
 
 func main() {
@@ -99,12 +141,43 @@ func main() {
 
 	listenAddr := "[::]:" + *listenPort
 	logger.Infof("🚀 Starting railtail (ts-hostname=%s, listen-addr=%s, target-addr=%s)", *tsHostname, listenAddr, *targetAddr)
-	listener, err := net.Listen("tcp", listenAddr)
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			logger.Errorf("listener accept failed: %v", err)
-		}
-		go fwd(logger, conn, ts, *targetAddr)
+
+	targetUri, err := url.Parse(*targetAddr)
+	if err != nil {
+		logger.Fatalf("unable to parse target address: %v", err)
 	}
+
+	if targetUri.Scheme == "http" || targetUri.Scheme == "https" {
+		// HTTP/s proxy
+        logger.Info("running in HTTP/s proxy mode (http(s):// scheme detected in targetAddr)")
+		httpClient := ts.HTTPClient()
+		httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+		httpServer := http.Server{
+			Addr: listenAddr,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				handleHttpConn(logger, httpClient, *targetAddr, w, r)
+			}),
+		}
+		err := httpServer.ListenAndServe()
+		if err != nil {
+			logger.Fatalf("unable to start http server: %v", err)
+		}
+	} else {
+		// TCP tunnel
+		logger.Info("running in TCP tunnel mode (no HTTP scheme detected in targetAddr)")
+		listener, err := net.Listen("tcp", listenAddr)
+		if err != nil {
+			logger.Fatalf("unable to start listener: %v", err)
+		}
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				logger.Errorf("listener accept failed: %v", err)
+			}
+			go handleTcpConn(logger, conn, ts, *targetAddr)
+		}
+	}
+
 }
