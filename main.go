@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"time"
 
 	"go.uber.org/zap"
@@ -24,6 +25,17 @@ var (
 	targetAddr = flag.String("target-addr", "", "address:port of a tailscale node to send traffic to (or set env: TARGET_ADDR)")
 	tsAuthKey  = cmp.Or(os.Getenv("TS_AUTH_KEY"), "")
 )
+
+var httpHopHeaders = []string{
+	"Connection",
+	"Keep-Alive",
+	"Proxy-Authenticate",
+	"Proxy-Authorization",
+	"Trailers",
+	"Transfer-Encoding",
+	"Upgrade",
+	"Te",
+}
 
 func handleTcpConn(logger *zap.SugaredLogger, lstConn net.Conn, ts *tsnet.Server, target string) {
 	defer lstConn.Close()
@@ -57,7 +69,7 @@ func handleTcpConn(logger *zap.SugaredLogger, lstConn net.Conn, ts *tsnet.Server
 func handleHttpConn(logger *zap.SugaredLogger, outboundClient *http.Client, targetAddr string, w http.ResponseWriter, r *http.Request) {
 	targetUri := fmt.Sprintf("%s%s", targetAddr, r.URL.Path)
 
-	logger.Infof("[http] %s %s", r.Method, targetUri)
+	logger.Infof("[http] fwd %s (%s) -> %s %s", r.RemoteAddr, r.URL.Path, r.Method, targetUri)
 
 	outReq, err := http.NewRequest(r.Method, targetUri, r.Body)
 	if err != nil {
@@ -69,6 +81,10 @@ func handleHttpConn(logger *zap.SugaredLogger, outboundClient *http.Client, targ
 	// Copy headers: in -> out
 	for name, values := range r.Header {
 		for _, value := range values {
+			// Skip hop-by-hop headers
+			if slices.Contains(httpHopHeaders, name) {
+				continue
+			}
 			outReq.Header.Add(name, value)
 		}
 	}
@@ -84,10 +100,17 @@ func handleHttpConn(logger *zap.SugaredLogger, outboundClient *http.Client, targ
 	// Copy headers: out (resp) -> in
 	for name, values := range resp.Header {
 		for _, value := range values {
+			// Skip hop-by-hop headers
+			if slices.Contains(httpHopHeaders, name) {
+				continue
+			}
 			w.Header().Add(name, value)
 		}
 	}
 
+	if upstreamIp, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		w.Header().Set("X-Forwarded-For", upstreamIp)
+	}
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
 }
@@ -154,6 +177,11 @@ func main() {
 		httpClient := ts.HTTPClient()
 		httpClient.Timeout = 5 * time.Minute
 		httpClient.Transport = &http.Transport{
+			Dial: (&net.Dialer{
+				Timeout:   5 * time.Minute,
+				KeepAlive: 5 * time.Minute,
+			}).Dial,
+			DialContext:     ts.Dial,
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 		httpServer := http.Server{
