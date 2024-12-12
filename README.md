@@ -1,8 +1,49 @@
-# railtail
+# <img align="left" width="40" height="40" src="https://res.cloudinary.com/railway/image/upload/v1734036971/railtail_avdaue.png" alt="railtail logo"> railtail
 
-railtail is a simple TCP forwarder for Railway workloads connecting to
-Tailscale nodes. It listens on a local address and forwards traffic it
-receives on the local address to a target Tailscale peer address.
+railtail is a HTTP/TCP proxy for Railway workloads connecting to Tailscale
+nodes. It listens on a local address and forwards traffic it receives on
+the local address to a target Tailscale node address.
+
+📣 This is a workaround until there are [full VMs available in Railway](https://help.railway.com/feedback/full-unix-v-ms-44eef294). Please upvote the thread if you want this feature!
+
+## Usage
+
+1. [Install and setup Tailscale](https://tailscale.com/kb/1017/install) on the
+   machine you want to connect to. If you're using Tailscale as a subnet
+   router, ensure you advertise the correct routes and approve the subnets
+   in the Tailscale admin console.
+
+2. Deploy this template to Railway:
+
+   [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/railtail?referralCode=EPXG5z)
+
+3. In services that need to connect to the Tailscale node, connect to your
+   railtail service using the `RAILWAY_PRIVATE_DOMAIN` and `LISTEN_PORT`
+   variables. For example:
+
+   ```sh
+   MY_PRIVATE_TAILSCALE_SERVICE="http://{{railtail.RAILWAY_PRIVATE_DOMAIN}}:${{railtail.LISTEN_PORT}}"
+   ```
+
+Look at the [Examples](#examples) section for provider-specific examples.
+
+## Configuration
+
+railtail will forward TCP connections if you provide a `TARGET_ADDR` without
+a `http://` or `https://` scheme. If you want railtail to act as an HTTP
+proxy, ensure you have a `http://` or `https://` in your `TARGET_ADDR`.
+
+| Environment Variable | CLI Argument   | Description                                                 |
+| -------------------- | -------------- | ----------------------------------------------------------- |
+| `TARGET_ADDR`        | `-target-addr` | Required. Address of the Tailscale node to send traffic to. |
+| `LISTEN_PORT`        | `-listen-port` | Required. Port to listen on.                                |
+| `TS_HOSTNAME`        | `-ts-hostname` | Required. Hostname to use for Tailscale.                    |
+| `TS_AUTH_KEY`        | N/A            | Required. Tailscale auth key. Must be set in environment.   |
+| `TS_STATEDIR_PATH`   | N/A            | Optional. Tailscale state dir. Defaults to `/tmp/railtail`. |
+
+_CLI arguments will take precedence over environment variables._
+
+## About
 
 This was created to work around userspace networking restrictions. Dialing a
 Tailscale node from a container requires you to do it over Tailscale's
@@ -10,26 +51,14 @@ local SOCKS5/HTTP proxy, which is not always ergonomical especially if
 you're connecting to databases or other services with minimal support
 for SOCKS5 (e.g. db connections from an application).
 
-This is designed to be run as a separate service in Railway that you
+railtail is designed to be run as a separate service in Railway that you
 connect to over Railway's Private Network.
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/YIGsfy?referralCode=EPXG5z)
-
-> ⚠️ **Warning**: Do not expose this service on Railway publicly! This service
-> is intended to be used via Railway's Private Network only.
+> ⚠️ **Warning**: Do not expose this service on Railway publicly!
 >
 > ![Networking settings warning](https://res.cloudinary.com/railway/image/upload/v1733851092/cs-2024-12-11-01.12_f1z1xy.png)
-
-## Configuration
-
-| Environment Variable | CLI Argument   | Description                                                 |
-| -------------------- | -------------- | ----------------------------------------------------------- |
-| `TS_AUTH_KEY`        | N/A            | Required. Tailscale auth key. Must be set in environment.   |
-| `TS_HOSTNAME`        | `-ts-hostname` | Required. Hostname to use for Tailscale.                    |
-| `LISTEN_PORT`        | `-listen-port` | Required. Port to listen on.                                |
-| `TARGET_ADDR`        | `-target-addr` | Required. Address of the Tailscale node to send traffic to. |
-
-_CLI arguments will take precedence over environment variables._
+>
+> This service is intended to be used via Railway's Private Network only.
 
 ## Examples
 
@@ -53,7 +82,7 @@ _CLI arguments will take precedence over environment variables._
 
 2. Deploy railtail to Railway by clicking the button below:
 
-   [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/YIGsfy?referralCode=EPXG5z)
+   [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/railtail?referralCode=EPXG5z)
 
 3. Use your new railtail service's Private Domain to connect to your RDS instance:
 
