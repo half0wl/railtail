@@ -38,8 +38,8 @@ proxy, ensure you have a `http://` or `https://` in your `TARGET_ADDR`.
 | `TARGET_ADDR`        | `-target-addr` | Required. Address of the Tailscale node to send traffic to. |
 | `LISTEN_PORT`        | `-listen-port` | Required. Port to listen on.                                |
 | `TS_HOSTNAME`        | `-ts-hostname` | Required. Hostname to use for Tailscale.                    |
+| `TS_STATEDIR_PATH`   | `-ts-state-dir`| Optional. Tailscale state dir. Defaults to `/tmp/railtail`. |
 | `TS_AUTH_KEY`        | N/A            | Required. Tailscale auth key. Must be set in environment.   |
-| `TS_STATEDIR_PATH`   | N/A            | Optional. Tailscale state dir. Defaults to `/tmp/railtail`. |
 
 _CLI arguments will take precedence over environment variables._
 
@@ -80,12 +80,12 @@ connect to over Railway's Private Network.
    sudo tailscale up --reset --advertise-routes=172.31.0.0/16
    ```
 
-2. Deploy railtail to Railway by clicking the button below:
+2. Deploy railtail into your pre-existing Railway project:
 
    [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/railtail?referralCode=EPXG5z)
 
 3. Use your new railtail service's Private Domain to connect to your RDS instance:
 
    ```sh
-   DATABASE_URL="postgresql://u:p@${{railtail.RAILWAY_PRIVATE_DOMAIN}}:${{railtail.LISTEN_PORT}}/dbname"
+   DATABASE_URL="postgresql://username:password@${{railtail.RAILWAY_PRIVATE_DOMAIN}}:${{railtail.LISTEN_PORT}}/dbname"
    ```
