@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
 	"go.uber.org/zap"
 	"tailscale.com/tsnet"
@@ -149,13 +150,18 @@ func main() {
 
 	if targetUri.Scheme == "http" || targetUri.Scheme == "https" {
 		// HTTP/s proxy
-        logger.Info("running in HTTP/s proxy mode (http(s):// scheme detected in targetAddr)")
+		logger.Info("running in HTTP/s proxy mode (http(s):// scheme detected in targetAddr)")
 		httpClient := ts.HTTPClient()
+		httpClient.Timeout = 5 * time.Minute
 		httpClient.Transport = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
 		httpServer := http.Server{
-			Addr: listenAddr,
+			Addr:              listenAddr,
+			ReadTimeout:       15 * time.Second,
+			WriteTimeout:      15 * time.Second,
+			IdleTimeout:       60 * time.Second,
+			ReadHeaderTimeout: 5 * time.Second,
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				handleHttpConn(logger, httpClient, *targetAddr, w, r)
 			}),
