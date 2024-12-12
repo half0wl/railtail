@@ -27,7 +27,7 @@ var (
 func handleTcpConn(logger *zap.SugaredLogger, lstConn net.Conn, ts *tsnet.Server, target string) {
 	defer lstConn.Close()
 
-	logger.Infof("fwd: %s -> %s -> %s", lstConn.LocalAddr(), lstConn.RemoteAddr(), target)
+	logger.Infof("[tcp] fwd: %s -> %s -> %s", lstConn.LocalAddr(), lstConn.RemoteAddr(), target)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -56,7 +56,7 @@ func handleTcpConn(logger *zap.SugaredLogger, lstConn net.Conn, ts *tsnet.Server
 func handleHttpConn(logger *zap.SugaredLogger, outboundClient *http.Client, targetAddr string, w http.ResponseWriter, r *http.Request) {
 	targetUri := fmt.Sprintf("%s%s", targetAddr, r.URL.Path)
 
-	logger.Infof("HTTP: %s %s", r.Method, targetUri)
+	logger.Infof("[http] %s %s", r.Method, targetUri)
 
 	outReq, err := http.NewRequest(r.Method, targetUri, r.Body)
 	if err != nil {
