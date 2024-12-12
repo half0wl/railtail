@@ -80,7 +80,7 @@ connect to over Railway's Private Network.
 
 2. Deploy railtail to Railway by clicking the button below:
 
-   [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/YIGsfy?referralCode=EPXG5z)
+   [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template/railtail?referralCode=EPXG5z)
 
 3. Use your new railtail service's Private Domain to connect to your RDS instance:
 
