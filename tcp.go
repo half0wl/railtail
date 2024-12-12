@@ -26,13 +26,19 @@ func fwdTCP(lstConn net.Conn, ts *tsnet.Server, targetAddr string) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		_, err := io.Copy(tsConn, lstConn)
-		return fmt.Errorf("failed to copy data to tailscale node: %w", err)
+		if _, err := io.Copy(tsConn, lstConn); err != nil {
+			return fmt.Errorf("failed to copy data to tailscale node: %w", err)
+		}
+
+		return nil
 	})
 
 	g.Go(func() error {
-		_, err := io.Copy(lstConn, tsConn)
-		return fmt.Errorf("failed to copy data from tailscale node: %w", err)
+		if _, err := io.Copy(lstConn, tsConn); err != nil {
+			return fmt.Errorf("failed to copy data from tailscale node: %w", err)
+		}
+
+		return nil
 	})
 
 	if err := g.Wait(); err != nil {
