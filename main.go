@@ -27,6 +27,7 @@ var (
 	tsHostname     = flag.String("ts-hostname", "", "hostname to use for tailscale (or set env: TS_HOSTNAME)")
 	listenPort     = flag.String("listen-port", "", "port to listen on (or set env: LISTEN_PORT)")
 	targetAddr     = flag.String("target-addr", "", "address:port of a tailscale node to send traffic to (or set env: TARGET_ADDR)")
+	tsLoginServer  = flag.String("ts-login-server", "", "Provide the base URL of a control server instead of https://controlplane.tailscale.com. If you are using Headscale for your control server, use your Headscale instance's URL (or set env: TS_LOGIN_SERVER)")
 	tsStateDirPath = cmp.Or(os.Getenv("TS_STATEDIR_PATH"), DEFAULT_TS_STATE_DIR)
 	tsAuthKey      = cmp.Or(os.Getenv("TS_AUTH_KEY"), "")
 )
@@ -78,12 +79,17 @@ func main() {
 		logger.Fatal("target-addr is required (set TARGET_ADDR in env or use -target-addr)")
 	}
 
+	if *tsLoginServer == "" {
+		*tsLoginServer = cmp.Or(os.Getenv("TS_LOGIN_SERVER"), "")
+	}
+
 	ts := &tsnet.Server{
 		Hostname:     *tsHostname,
 		AuthKey:      tsAuthKey,
 		Dir:          tsStateDirPath,
 		RunWebClient: false,
 		Ephemeral:    false,
+		ControlURL:   *tsLoginServer,
 	}
 	if err := ts.Start(); err != nil {
 		logger.Fatalf("can't start tsnet server: %v", err)
@@ -98,11 +104,15 @@ func main() {
 	listenAddr := "[::]:" + *listenPort
 
 	logger.Infof("🚀 Starting railtail")
-	logger.Infof("Mode                 : %s", mode)
-	logger.Infof("Listening on         : %s", listenAddr)
-	logger.Infof("Sending traffic to   : %s", *targetAddr)
-	logger.Infof("Tailscale hostname   : %s", *tsHostname)
-	logger.Infof("Tailscale state dir  : %s", tsStateDirPath)
+	logger.Infof("Mode                  : %s", mode)
+	logger.Infof("Listening on          : %s", listenAddr)
+	logger.Infof("Sending traffic to    : %s", *targetAddr)
+	logger.Infof("Tailscale hostname    : %s", *tsHostname)
+	logger.Infof("Tailscale state dir   : %s", tsStateDirPath)
+
+	if *tsLoginServer != "" {
+		logger.Infof("Tailscale Login server: %s", *tsLoginServer)
+	}
 
 	if mode == "TCP" {
 		runTcp(logger, listenAddr, ts, *targetAddr)

@@ -33,13 +33,14 @@ railtail will forward TCP connections if you provide a `TARGET_ADDR` without
 a `http://` or `https://` scheme. If you want railtail to act as an HTTP
 proxy, ensure you have a `http://` or `https://` in your `TARGET_ADDR`.
 
-| Environment Variable | CLI Argument   | Description                                                 |
-| -------------------- | -------------- | ----------------------------------------------------------- |
-| `TARGET_ADDR`        | `-target-addr` | Required. Address of the Tailscale node to send traffic to. |
-| `LISTEN_PORT`        | `-listen-port` | Required. Port to listen on.                                |
-| `TS_HOSTNAME`        | `-ts-hostname` | Required. Hostname to use for Tailscale.                    |
-| `TS_AUTH_KEY`        | N/A            | Required. Tailscale auth key. Must be set in environment.   |
-| `TS_STATEDIR_PATH`   | N/A            | Optional. Tailscale state dir. Defaults to `/tmp/railtail`. |
+| Environment Variable | CLI Argument       | Description                                                                                                                                                   |
+| -------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TARGET_ADDR`        | `-target-addr`     | Required. Address of the Tailscale node to send traffic to.                                                                                                   |
+| `LISTEN_PORT`        | `-listen-port`     | Required. Port to listen on.                                                                                                                                  |
+| `TS_HOSTNAME`        | `-ts-hostname`     | Required. Hostname to use for Tailscale.                                                                                                                      |
+| `TS_AUTH_KEY`        | N/A                | Required. Tailscale auth key. Must be set in environment.                                                                                                     |
+| `TS_LOGIN_SERVER`    | `-ts-login-server` | Optional. Base URL of the control server. If you are using Headscale for your control server, use your Headscale instance's url. Defaults to using Tailscale. |
+| `TS_STATEDIR_PATH`   | N/A                | Optional. Tailscale state dir. Defaults to `/tmp/railtail`.                                                                                                   |
 
 _CLI arguments will take precedence over environment variables._
 
