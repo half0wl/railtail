@@ -2,247 +2,120 @@ package main
 
 import (
 	"cmp"
-	"context"
 	"crypto/tls"
-	"flag"
 	"fmt"
-	"io"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
-	"slices"
-	"strings"
+	"path/filepath"
 	"time"
 
-	"go.uber.org/zap"
+	"github.com/half0wl/railtail/internal/config"
+	"github.com/half0wl/railtail/internal/logger"
+
 	"tailscale.com/tsnet"
 )
 
-const (
-	DEFAULT_TS_STATE_DIR = "/tmp/railtail"
-)
-
-var (
-	tsHostname     = flag.String("ts-hostname", "", "hostname to use for tailscale (or set env: TS_HOSTNAME)")
-	listenPort     = flag.String("listen-port", "", "port to listen on (or set env: LISTEN_PORT)")
-	targetAddr     = flag.String("target-addr", "", "address:port of a tailscale node to send traffic to (or set env: TARGET_ADDR)")
-	tsLoginServer  = flag.String("ts-login-server", "", "Provide the base URL of a control server instead of https://controlplane.tailscale.com. If you are using Headscale for your control server, use your Headscale instance's URL (or set env: TS_LOGIN_SERVER)")
-	tsStateDirPath = cmp.Or(os.Getenv("TS_STATEDIR_PATH"), DEFAULT_TS_STATE_DIR)
-	tsAuthKey      = cmp.Or(os.Getenv("TS_AUTH_KEY"), "")
-)
-
-var httpHopHeaders = []string{
-	"Connection",
-	"Keep-Alive",
-	"Proxy-Authenticate",
-	"Proxy-Authorization",
-	"Trailers",
-	"Transfer-Encoding",
-	"Upgrade",
-	"Te",
-}
-
 func main() {
-	zapLgr, err := zap.NewProduction()
-	if err != nil {
-		log.Fatal(err)
-	}
-	logger := zapLgr.Sugar()
-	defer logger.Sync()
-
-	flag.Parse()
-
-	if tsAuthKey == "" {
-		logger.Fatal("env TS_AUTH_KEY is required")
-	}
-
-	// Grab config from env if not provided in args. Args take precedence.
-	if *tsHostname == "" {
-		*tsHostname = os.Getenv("TS_HOSTNAME")
-	}
-	if *tsHostname == "" {
-		logger.Fatal("ts-hostname is required (set TS_HOSTNAME in env or use -ts-hostname)")
-	}
-
-	if *listenPort == "" {
-		*listenPort = os.Getenv("LISTEN_PORT")
-	}
-	if *listenPort == "" {
-		logger.Fatal("listen-port is required (set LISTEN_PORT in env or use -listen-port)")
-	}
-
-	if *targetAddr == "" {
-		*targetAddr = os.Getenv("TARGET_ADDR")
-	}
-	if *targetAddr == "" {
-		logger.Fatal("target-addr is required (set TARGET_ADDR in env or use -target-addr)")
-	}
-
-	if *tsLoginServer == "" {
-		*tsLoginServer = cmp.Or(os.Getenv("TS_LOGIN_SERVER"), "")
+	cfg, errs := config.LoadConfig()
+	if len(errs) > 0 {
+		logger.StderrWithSource.Error("configuration error(s) found", logger.ErrorsAttr(errs...))
+		os.Exit(1)
 	}
 
 	ts := &tsnet.Server{
-		Hostname:     *tsHostname,
-		AuthKey:      tsAuthKey,
-		Dir:          tsStateDirPath,
+		Hostname:     cfg.TSHostname,
+		AuthKey:      cfg.TSAuthKey,
 		RunWebClient: false,
 		Ephemeral:    false,
-		ControlURL:   *tsLoginServer,
+		ControlURL:   cfg.TSLoginServer,
+		UserLogf: func(format string, v ...any) {
+			logger.Stdout.Info(fmt.Sprintf(format, v...))
+		},
+		Dir: filepath.Join(cfg.TSStateDirPath, "railtail"),
 	}
 	if err := ts.Start(); err != nil {
-		logger.Fatalf("can't start tsnet server: %v", err)
+		logger.StderrWithSource.Error("failed to start tailscale network server", logger.ErrAttr(err))
+		os.Exit(1)
 	}
+
 	defer ts.Close()
 
-	mode := "TCP"
-	if strings.HasPrefix(*targetAddr, "http://") || strings.HasPrefix(*targetAddr, "https://") {
-		mode = "HTTP"
-	}
+	listenAddr := "[::]:" + cfg.ListenPort
 
-	listenAddr := "[::]:" + *listenPort
+	logger.Stdout.Info("🚀 Starting railtail",
+		slog.String("ts-hostname", cfg.TSHostname),
+		slog.String("listen-addr", listenAddr),
+		slog.String("target-addr", cfg.TargetAddr),
+		slog.String("ts-login-server", cmp.Or(cfg.TSLoginServer, "using_default")),
+		slog.String("ts-state-dir", filepath.Join(cfg.TSStateDirPath, "railtail")),
+	)
 
-	logger.Infof("🚀 Starting railtail")
-	logger.Infof("Mode                  : %s", mode)
-	logger.Infof("Listening on          : %s", listenAddr)
-	logger.Infof("Sending traffic to    : %s", *targetAddr)
-	logger.Infof("Tailscale hostname    : %s", *tsHostname)
-	logger.Infof("Tailscale state dir   : %s", tsStateDirPath)
-
-	if *tsLoginServer != "" {
-		logger.Infof("Tailscale Login server: %s", *tsLoginServer)
-	}
-
-	if mode == "TCP" {
-		runTcp(logger, listenAddr, ts, *targetAddr)
-		return
-	}
-
-	if mode == "HTTP" {
-		runHttp(logger, listenAddr, ts, *targetAddr)
-		return
-	}
-
-	logger.Fatalf("unsupported mode: %s", mode)
-}
-
-func handleTcpConn(logger *zap.SugaredLogger, lstConn net.Conn, ts *tsnet.Server, target string) {
-	defer lstConn.Close()
-
-	logger.Infof("[tcp] fwd: %s -> %s -> %s", lstConn.LocalAddr(), lstConn.RemoteAddr(), target)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	tsConn, err := ts.Dial(ctx, "tcp", target)
-	if err != nil {
-		logger.Errorf("ts dial failed: %v", err)
-		return
-	}
-
-	lstChan, tsChan := make(chan int64), make(chan int64)
-	go func() {
-		defer tsConn.Close()
-		n, _ := io.Copy(tsConn, lstConn)
-		lstChan <- int64(n)
-	}()
-	go func() {
-		defer lstConn.Close()
-		n, _ := io.Copy(lstConn, tsConn)
-		tsChan <- int64(n)
-	}()
-	<-lstChan
-	<-tsChan
-}
-
-func handleHttpConn(logger *zap.SugaredLogger, outboundClient *http.Client, targetAddr string, w http.ResponseWriter, r *http.Request) {
-	targetUri := fmt.Sprintf("%s%s", targetAddr, r.URL.Path)
-
-	logger.Infof("[http] fwd %s (%s) -> %s %s", r.RemoteAddr, r.URL.Path, r.Method, targetUri)
-
-	outReq, err := http.NewRequest(r.Method, targetUri, r.Body)
-	if err != nil {
-		logger.Errorf("error creating request: %v", err)
-		http.Error(w, "error creating request", http.StatusInternalServerError)
-		return
-	}
-
-	// Copy headers: in -> out
-	for name, values := range r.Header {
-		for _, value := range values {
-			// Skip hop-by-hop headers
-			if slices.Contains(httpHopHeaders, name) {
-				continue
-			}
-			outReq.Header.Add(name, value)
-		}
-	}
-
-	resp, err := outboundClient.Do(outReq)
-	if err != nil {
-		logger.Errorf("error sending request: %v", err)
-		http.Error(w, "error sending request", http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
-
-	// Copy headers: out (resp) -> in
-	for name, values := range resp.Header {
-		for _, value := range values {
-			// Skip hop-by-hop headers
-			if slices.Contains(httpHopHeaders, name) {
-				continue
-			}
-			w.Header().Add(name, value)
-		}
-	}
-
-	if upstreamIp, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-		w.Header().Set("X-Forwarded-For", upstreamIp)
-	}
-
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
-}
-
-func runTcp(logger *zap.SugaredLogger, listenAddr string, ts *tsnet.Server, targetAddr string) {
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
-		logger.Fatalf("unable to start listener: %v", err)
+		logger.StderrWithSource.Error("failed to start local listener", logger.ErrAttr(err))
+		os.Exit(1)
 	}
+
+	if cfg.ForwardTrafficType == config.ForwardTrafficTypeHTTP || cfg.ForwardTrafficType == config.ForwardTrafficTypeHTTPS {
+		logger.Stdout.Info("running in HTTP/s proxy mode (http(s):// scheme detected in targetAddr)",
+			slog.String("listen-addr", listenAddr),
+			slog.String("target-addr", cfg.TargetAddr),
+		)
+
+		httpClient := ts.HTTPClient()
+		httpClient.Transport.(*http.Transport).TLSClientConfig = &tls.Config{
+			InsecureSkipVerify: true,
+		}
+
+		server := http.Server{
+			IdleTimeout:       60 * time.Second,
+			ReadHeaderTimeout: 5 * time.Second,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				forwardingInfo := []any{
+					slog.String("remote-addr", r.RemoteAddr),
+					slog.String("target", cfg.TargetAddr),
+				}
+
+				logger.Stdout.Info("forwarding", forwardingInfo...)
+
+				if err := fwdHttp(httpClient, cfg.TargetAddr, w, r); err != nil {
+					logger.StderrWithSource.Error("failed to forward http request", append([]any{logger.ErrAttr(err)}, forwardingInfo...)...)
+				}
+			}),
+		}
+
+		if err := server.Serve(listener); err != nil {
+			logger.StderrWithSource.Error("failed to start http server", logger.ErrAttr(err))
+			os.Exit(1)
+		}
+	}
+
+	logger.Stdout.Info("running in TCP tunnel mode (no HTTP scheme detected in targetAddr)",
+		slog.String("listen-addr", listenAddr),
+		slog.String("target-addr", cfg.TargetAddr),
+	)
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			logger.Errorf("listener accept failed: %v", err)
+			logger.StderrWithSource.Error("failed to accept connection", logger.ErrAttr(err))
+			continue
 		}
-		go handleTcpConn(logger, conn, ts, targetAddr)
-	}
-}
 
-func runHttp(logger *zap.SugaredLogger, listenAddr string, ts *tsnet.Server, targetAddr string) {
-	httpClient := ts.HTTPClient()
-	httpClient.Timeout = 5 * time.Minute
-	httpClient.Transport = &http.Transport{
-		Dial: (&net.Dialer{
-			Timeout:   5 * time.Minute,
-			KeepAlive: 5 * time.Minute,
-		}).Dial,
-		DialContext:     ts.Dial,
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	httpServer := http.Server{
-		Addr:              listenAddr,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
-		ReadHeaderTimeout: 5 * time.Second,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			handleHttpConn(logger, httpClient, targetAddr, w, r)
-		}),
-	}
-	err := httpServer.ListenAndServe()
-	if err != nil {
-		logger.Fatalf("unable to start http server: %v", err)
+		forwardingInfo := []any{
+			slog.String("local-addr", conn.LocalAddr().String()),
+			slog.String("remote-addr", conn.RemoteAddr().String()),
+			slog.String("target", cfg.TargetAddr),
+		}
+
+		logger.Stdout.Info("forwarding tcp connection", forwardingInfo...)
+
+		go func() {
+			if err := fwdTCP(conn, ts, cfg.TargetAddr); err != nil {
+				logger.StderrWithSource.Error("forwarding failed", append([]any{logger.ErrAttr(err)}, forwardingInfo...)...)
+			}
+		}()
 	}
 }
