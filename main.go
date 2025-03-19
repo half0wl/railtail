@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"crypto/tls"
 	"fmt"
 	"log/slog"
@@ -28,6 +29,7 @@ func main() {
 		AuthKey:      cfg.TSAuthKey,
 		RunWebClient: false,
 		Ephemeral:    false,
+		ControlURL:   cfg.TSLoginServer,
 		UserLogf: func(format string, v ...any) {
 			logger.Stdout.Info(fmt.Sprintf(format, v...))
 		},
@@ -46,6 +48,7 @@ func main() {
 		slog.String("ts-hostname", cfg.TSHostname),
 		slog.String("listen-addr", listenAddr),
 		slog.String("target-addr", cfg.TargetAddr),
+		slog.String("ts-login-server", cmp.Or(cfg.TSLoginServer, "using_default")),
 		slog.String("ts-state-dir", filepath.Join(cfg.TSStateDirPath, "railtail")),
 	)
 

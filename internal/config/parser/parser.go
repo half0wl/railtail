@@ -65,8 +65,8 @@ func ParseConfig(cfg any) []error {
 
 		// If no value set yet, use default value if present
 		if fieldValue.String() == "" {
-			if defaultVal := field.Tag.Get("default"); defaultVal != "" {
-				fieldValue.SetString(defaultVal)
+			if _, exists := field.Tag.Lookup("default"); exists {
+				fieldValue.SetString(field.Tag.Get("default"))
 				continue
 			}
 		}
