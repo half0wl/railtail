@@ -35,7 +35,7 @@ type Config struct {
 }
 
 func init() {
-	// add help flag purly for the usage message
+	// add help flag purely for the usage message
 	flag.Bool("help", false, "Show help message")
 
 	// Only parse and print usage if -help is present in arguments
@@ -58,6 +58,7 @@ func LoadConfig() (*Config, []error) {
 	// Validate target-addr if it's set to either be a valid URL with a port or a valid address:port
 	if cfg.TargetAddr != "" {
 		protocol := strings.SplitN(cfg.TargetAddr, "://", 2)[0]
+
 		switch protocol {
 		case "https", "http":
 			cfg.ForwardTrafficType = ForwardTrafficType(protocol)
@@ -73,6 +74,7 @@ func LoadConfig() (*Config, []error) {
 			}
 		default:
 			cfg.ForwardTrafficType = ForwardTrafficTypeTCP
+
 			_, _, err := net.SplitHostPort(cfg.TargetAddr)
 			if err != nil {
 				errors = append(errors, fmt.Errorf("%w: %w", ErrTargetAddrInvalid, err))

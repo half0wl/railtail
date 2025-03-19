@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// ParseFlags parses the flags and returns a map of the flags and their values
 func ParseFlags(cfg any, t ...reflect.Type) map[string]*string {
 	flags := make(map[string]*string)
 
@@ -29,6 +30,7 @@ func ParseFlags(cfg any, t ...reflect.Type) map[string]*string {
 	return flags
 }
 
+// ParseConfig parses the config and returns all errors that occurred while parsing the config
 func ParseConfig(cfg any) []error {
 	var errors []error
 
