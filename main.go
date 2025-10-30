@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"github.com/half0wl/railtail/internal/config"
 	"github.com/half0wl/railtail/internal/logger"
 
+	"tailscale.com/ipn"
 	"tailscale.com/tsnet"
 )
 
@@ -48,6 +50,29 @@ func main() {
 	}
 
 	defer ts.Close()
+
+	if cfg.TSAutoAcceptRoutes == "true" {
+		// Auto-accept all routes
+		lc, err := ts.LocalClient()
+		if err != nil {
+			logger.StderrWithSource.Error("failed to get local client", logger.ErrAttr(err))
+			os.Exit(1)
+		}
+
+		maskedPrefs := &ipn.MaskedPrefs{
+			Prefs: ipn.Prefs{
+				RouteAll: true,
+			},
+			RouteAllSet: true,
+		}
+
+		if _, err := lc.EditPrefs(context.Background(), maskedPrefs); err != nil {
+			logger.StderrWithSource.Error("failed to set auto-accept routes", logger.ErrAttr(err))
+			os.Exit(1)
+		}
+
+		logger.Stdout.Info("auto-accept routes successfully set")
+	}
 
 	listenAddr := "[::]:" + cfg.ListenPort
 
