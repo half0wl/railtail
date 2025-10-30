@@ -31,6 +31,7 @@ type Config struct {
 	TSLoginServer  string `flag:"ts-login-server" env:"TS_LOGIN_SERVER" default:"" usage:"base url of the control server, If you are using Headscale for your control server, use your Headscale instance's URL"`
 	TSStateDirPath string `flag:"ts-state-dir" env:"TS_STATEDIR_PATH" default:"/tmp/railtail" usage:"tailscale state dir"`
 	TSAuthKey      string `env:"TS_AUTHKEY,TS_AUTH_KEY" usage:"tailscale auth key"`
+	TSDebug        string `flag:"ts-debug" env:"TS_DEBUG" default:"false" usage:"enable tailscale debug logging (true or false)"`
 
 	ForwardTrafficType ForwardTrafficType
 }

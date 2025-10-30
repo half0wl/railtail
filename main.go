@@ -33,6 +33,13 @@ func main() {
 		UserLogf: func(format string, v ...any) {
 			logger.Stdout.Info(fmt.Sprintf(format, v...))
 		},
+		Logf: func(format string, v ...any) {
+			if cfg.TSDebug != "true" {
+				return
+			}
+
+			logger.Stdout.Info(fmt.Sprintf(format, v...))
+		},
 		Dir: filepath.Join(cfg.TSStateDirPath, "railtail"),
 	}
 	if err := ts.Start(); err != nil {
